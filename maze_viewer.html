@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Лабіринт із труб</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px 16px;
+      background: #fff;
+      color: #263238;
+      font: 14px/1.5 system-ui, sans-serif;
+    }
+    main { max-width: 1100px; margin: auto; }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    p { margin: 8px 0; color: #56636b; }
+    .results { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+    .controls { margin: 20px 0 14px; }
+    .step { display: flex; justify-content: space-between; gap: 12px; }
+    output { font-variant-numeric: tabular-nums; }
+    input { width: 100%; margin: 12px 0; accent-color: #087f6b; }
+    button {
+      padding: 8px 12px;
+      border: 1px solid #c3ccd1;
+      border-radius: 6px;
+      background: #fff;
+      color: #263238;
+      font: inherit;
+      cursor: pointer;
+    }
+    button[aria-pressed="true"] { background: #fff0c7; border-color: #b77b19; }
+    button:focus-visible, input:focus-visible, #map-wrap:focus-visible {
+      outline: 2px solid #087f6b;
+      outline-offset: 3px;
+    }
+    #map-wrap {
+      max-height: 70vh;
+      overflow: auto;
+      border: 1px solid #d9dfe2;
+      border-radius: 6px;
+      background: #fff;
+    }
+    #map {
+      width: max-content;
+      margin: 0;
+      padding: 12px;
+      color: #67747c;
+      font: 13px/16px Consolas, "Courier New", monospace;
+    }
+    .cell { display: inline-block; width: 1ch; text-align: center; }
+    .forward { color: #006b57; background: #d5f3e9; }
+    .backward { color: #3546a0; background: #e5e9ff; }
+    .inside { color: #754d00; background: #ffe5a1; }
+    .start { color: #fff; background: #263238; font-weight: bold; }
+    .current { outline: 1px solid currentColor; outline-offset: -1px; }
+    .meeting { color: #fff; background: #a14800; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 12px; }
+    .legend span { padding: 2px 5px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Лабіринт із труб</h1>
+  <div class="results">
+    <span>Найдальша клітинка: <strong id="distance"></strong> кроків</span>
+    <span>Усередині: <strong id="area"></strong> клітинок</span>
+  </div>
+  <p>Повзунок показує шлях від S в обидва боки</p>
+
+  <div class="controls">
+    <div class="step">
+      <label for="progress">Крок від старту</label>
+      <output id="step" for="progress"></output>
+    </div>
+    <input id="progress" type="range" min="0" max="1" value="0" step="1">
+    <button id="inside" aria-pressed="false">Показати всередині</button>
+  </div>
+
+  <div id="map-wrap" tabindex="0" role="region" aria-label="Поле лабіринту з прокручуванням">
+    <pre id="map"></pre>
+  </div>
+  <div class="legend">
+    <span class="start">S — старт</span>
+    <span class="forward">Перший напрямок</span>
+    <span class="backward">Зворотний напрямок</span>
+    <span class="inside">Внутрішні клітинки</span>
+    <span class="meeting">Зустріч</span>
+  </div>
+  <p id="status"></p>
+</main>
+
+<script id="maze-data" type="application/json">__MAZE_DATA__</script>
+<script>
+const data = JSON.parse(document.getElementById('maze-data').textContent);
+const {grid, loop, inside, part1, part2} = data;
+const map = document.getElementById('map');
+const slider = document.getElementById('progress');
+const insideButton = document.getElementById('inside');
+const stepLabel = document.getElementById('step');
+const status = document.getElementById('status');
+const cells = [];
+let showInside = false;
+
+document.getElementById('distance').textContent = part1;
+document.getElementById('area').textContent = part2;
+slider.max = part1;
+
+
+const content = document.createDocumentFragment();
+for (let r = 0; r < grid.length; r++) {
+  cells[r] = [];
+  for (const char of grid[r]) {
+    const cell = document.createElement('span');
+    cell.className = 'cell';
+    cell.textContent = char;
+    cells[r].push(cell);
+    content.appendChild(cell);
+  }
+  if (r < grid.length - 1) content.appendChild(document.createTextNode('\n'));
+}
+map.appendChild(content);
+
+const loopCells = loop.map(([r, c]) => cells[r][c]);
+const insideCells = inside.map(([r, c]) => cells[r][c]);
+
+function draw() {
+  const step = Number(slider.value);
+  const total = loopCells.length;
+  for (let i = 0; i < total; i++) {
+    let color = '';
+    if (i <= step) color = 'forward';
+    else if (total - i <= step) color = 'backward';
+    loopCells[i].className = 'cell ' + color;
+  }
+
+  loopCells[0].className = 'cell start';
+  if (step === part1) {
+    loopCells[step].className = 'cell meeting';
+  } else if (step > 0) {
+    loopCells[step].classList.add('current');
+    loopCells[total - step].classList.add('current');
+  }
+
+  stepLabel.textContent = step + ' / ' + part1;
+  status.textContent = step === part1
+    ? 'Зустріч у найдальшій клітинці: ' + part1 + ' кроків від S.'
+    : 'Від S пройдено ' + step + ' кроків у кожному напрямку.';
+}
+
+slider.oninput = draw;
+insideButton.onclick = () => {
+  showInside = !showInside;
+  for (const cell of insideCells) cell.classList.toggle('inside', showInside);
+  insideButton.setAttribute('aria-pressed', String(showInside));
+  insideButton.textContent = showInside ? 'Сховати всередині' : 'Показати всередині';
+};
+
+draw();
+</script>
+</body>
+</html>
